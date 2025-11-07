@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Base de Datos MariaDB
+  mariadb:
+    image: mariadb:11.1
+    container_name: six-pack-db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: six_pack_store
+    volumes:
+      - ./database.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - six-pack-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Backend (Node.js + Express)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: six-pack-backend
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: six_pack_store
+      DB_USER: root
+      DB_PASS: root
+      PORT: 5000
+      CLIENT_URL: http://localhost:3000
+      NODE_ENV: development
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - six-pack-network
+
+  # Frontend (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: six-pack-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://localhost:5000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - six-pack-network
+
+volumes:
+  mariadb_data:
+
+networks:
+  six-pack-network:
+    driver: bridge
